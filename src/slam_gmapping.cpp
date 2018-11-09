@@ -74,11 +74,10 @@ void SlamGmapping::startLiveSlam() {
 }
 
 void SlamGmapping::publishLoop(double transform_publish_period){
-    if(transform_publish_period == 0)
+    if (transform_publish_period == 0)
         return;
-
     rclcpp::Rate r(1.0 / transform_publish_period);
-    while(rclcpp::ok()){
+    while (rclcpp::ok()) {
         publishTransform();
         r.sleep();
     }
@@ -106,7 +105,7 @@ bool SlamGmapping::getOdomPose(GMapping::OrientedPoint& gmap_pose, const rclcpp:
     geometry_msgs::msg::PoseStamped odom_pose;
     try
     {
-        buffer_.transform(centered_laser_pose_, odom_pose, odom_frame_);
+        buffer_.transform(centered_laser_pose_, odom_pose, odom_frame_, tf2::durationFromSec(1.0));
     }
     catch(tf2::TransformException& e)
     {
@@ -278,11 +277,11 @@ bool SlamGmapping::addScan(const sensor_msgs::msg::LaserScan::SharedPtr scan, GM
         return false;
 
     // GMapping wants an array of doubles...
-    double *ranges_double = new double[scan->ranges.size()];
+    auto *ranges_double = new double[scan->ranges.size()];
     // If the angle increment is negative, we have to invert the order of the readings.
     if (do_reverse_range_) {
         RCLCPP_DEBUG(this->get_logger(), "Inverting scan");
-        int num_ranges = scan->ranges.size();
+        int num_ranges = static_cast<int>(scan->ranges.size());
         for (int i = 0; i < num_ranges; i++) {
             // Must filter out short readings, because the mapper won't
             if (scan->ranges[num_ranges - i - 1] < scan->range_min)
@@ -299,6 +298,21 @@ bool SlamGmapping::addScan(const sensor_msgs::msg::LaserScan::SharedPtr scan, GM
                 ranges_double[i] = (double) scan->ranges[i];
         }
     }
+
+    GMapping::RangeReading reading(static_cast<unsigned int>(scan->ranges.size()),
+                                   ranges_double,
+                                   gsp_laser_,
+                                   scan->header.stamp.sec);
+
+    // ...but it deep copies them in RangeReading constructor, so we don't
+    // need to keep our array around.
+    delete[] ranges_double;
+
+    reading.setPose(gmap_pose);
+
+    RCLCPP_DEBUG(this->get_logger(), "processing scan");
+
+    return gsp_->processScan(reading);
 }
 
 
@@ -470,14 +484,18 @@ void SlamGmapping::publishTransform()
 {
     map_to_odom_mutex_.lock();
     rclcpp::Time tf_expiration = now() + rclcpp::Duration(static_cast<rcl_duration_value_t>(tf_delay_));
-
     geometry_msgs::msg::TransformStamped transform;
     transform.header.frame_id = map_frame_;
     transform.header.stamp = tf_expiration;
     transform.child_frame_id = odom_frame_;
-    transform.transform = tf2::toMsg(map_to_odom_);
-
-    tfB_->sendTransform(transform);
+    tfB_ = new tf2_ros::TransformBroadcaster(shared_from_this());
+    try {
+        transform.transform = tf2::toMsg(map_to_odom_);
+        tfB_->sendTransform(transform);
+    }
+    catch (tf2::LookupException& te){
+        RCLCPP_INFO(this->get_logger(), te.what());
+    }
     map_to_odom_mutex_.unlock();
 }
 
@@ -487,7 +505,7 @@ int main(int argc, char* argv[])
 
     auto slam_gmapping_node = std::make_shared<SlamGmapping>();
     rclcpp::spin(slam_gmapping_node);
-
+    tf2_ros::TransformBroadcaster tfb(slam_gmapping_node);
     rclcpp::shutdown();
     return(0);
 }
