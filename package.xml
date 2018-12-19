@@ -3,8 +3,8 @@
 <package format="2">
     <name>slam_gmapping</name>
     <version>0.0.0</version>
-    <description>Slam Gmapping on ROS2 Bouncy</description>
-    <maintainer email="shiveshkhaitan@gmail.com">shivesh</maintainer>
+    <description>Slam Gmapping on ROS2 Crystal</description>
+    <maintainer email="shiveshkhaitan@gmail.com">shiveshkhaitan</maintainer>
     <license>TODO: License declaration</license>
 
     <buildtool_depend>ament_cmake</buildtool_depend>
