@@ -64,6 +64,7 @@ private:
     bool got_first_scan_;
 
     bool got_map_;
+    nav_msgs::msg::OccupancyGrid map_;
 
     rclcpp::Duration map_update_interval_;
     tf2::Transform map_to_odom_;

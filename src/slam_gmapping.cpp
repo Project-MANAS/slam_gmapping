@@ -13,7 +13,7 @@ SlamGmapping::SlamGmapping():
     buffer_(get_clock()),
     tfl_(buffer_),
     scan_filter_sub_(nullptr),
-    map_update_interval_(5, 0),
+    map_update_interval_(0, 5),
     laser_count_(0),
     transform_thread_(nullptr)
 {
@@ -53,7 +53,7 @@ void SlamGmapping::init() {
     stt_ = 0.2;
     linearUpdate_ = 1.0;
     angularUpdate_ = 0.5;
-    temporalUpdate_ = -1.0;
+    temporalUpdate_ = 1.0;
     resampleThreshold_ = 0.5;
     particles_ = 30;
     xmin_ = -10.0;
@@ -396,16 +396,15 @@ void SlamGmapping::updateMap(const sensor_msgs::msg::LaserScan::SharedPtr scan)
     if(entropy.data > 0.0)
         entropy_publisher_->publish(entropy);
 
-    nav_msgs::msg::OccupancyGrid map;
     if(!got_map_) {
-        map.info.resolution = static_cast<nav_msgs::msg::MapMetaData::_resolution_type>(delta_);
-        map.info.origin.position.x = 0.0;
-        map.info.origin.position.y = 0.0;
-        map.info.origin.position.z = 0.0;
-        map.info.origin.orientation.x = 0.0;
-        map.info.origin.orientation.y = 0.0;
-        map.info.origin.orientation.z = 0.0;
-        map.info.origin.orientation.w = 1.0;
+        map_.info.resolution = static_cast<nav_msgs::msg::MapMetaData::_resolution_type>(delta_);
+        map_.info.origin.position.x = 0.0;
+        map_.info.origin.position.y = 0.0;
+        map_.info.origin.position.z = 0.0;
+        map_.info.origin.orientation.x = 0.0;
+        map_.info.origin.orientation.y = 0.0;
+        map_.info.origin.orientation.z = 0.0;
+        map_.info.origin.orientation.w = 1.0;
     }
 
     GMapping::Point center;
@@ -435,7 +434,7 @@ void SlamGmapping::updateMap(const sensor_msgs::msg::LaserScan::SharedPtr scan)
     }
 
     // the map may have expanded, so resize ros message as well
-    if(map.info.width != (unsigned int) smap.getMapSizeX() || map.info.height != (unsigned int) smap.getMapSizeY()) {
+    if(map_.info.width != (unsigned int) smap.getMapSizeX() || map_.info.height != (unsigned int) smap.getMapSizeY()) {
 
         // NOTE: The results of ScanMatcherMap::getSize() are different from the parameters given to the constructor
         //       so we must obtain the bounding box in a different way
@@ -447,13 +446,13 @@ void SlamGmapping::updateMap(const sensor_msgs::msg::LaserScan::SharedPtr scan)
         RCLCPP_DEBUG(this->get_logger(), "map size is now %dx%d pixels (%f,%f)-(%f, %f)", smap.getMapSizeX(), smap.getMapSizeY(),
                   xmin_, ymin_, xmax_, ymax_);
 
-        map.info.width = static_cast<nav_msgs::msg::MapMetaData::_width_type>(smap.getMapSizeX());
-        map.info.height = static_cast<nav_msgs::msg::MapMetaData::_height_type>(smap.getMapSizeY());
-        map.info.origin.position.x = xmin_;
-        map.info.origin.position.y = ymin_;
-        map.data.resize(map.info.width * map.info.height);
+        map_.info.width = static_cast<nav_msgs::msg::MapMetaData::_width_type>(smap.getMapSizeX());
+        map_.info.height = static_cast<nav_msgs::msg::MapMetaData::_height_type>(smap.getMapSizeY());
+        map_.info.origin.position.x = xmin_;
+        map_.info.origin.position.y = ymin_;
+        map_.data.resize(map_.info.width * map_.info.height);
 
-        RCLCPP_DEBUG(this->get_logger(), "map origin: (%f, %f)", map.info.origin.position.x, map.info.origin.position.y);
+        RCLCPP_DEBUG(this->get_logger(), "map origin: (%f, %f)", map_.info.origin.position.x, map_.info.origin.position.y);
     }
 
     for(int x=0; x < smap.getMapSizeX(); x++)
@@ -465,24 +464,24 @@ void SlamGmapping::updateMap(const sensor_msgs::msg::LaserScan::SharedPtr scan)
             double occ=smap.cell(p);
             assert(occ <= 1.0);
             if(occ < 0)
-                map.data[MAP_IDX(map.info.width, x, y)] = -1;
+                map_.data[MAP_IDX(map_.info.width, x, y)] = -1;
             else if(occ > occ_thresh_)
             {
                 //map_.map.data[MAP_IDX(map_.map.info.width, x, y)] = (int)round(occ*100.0);
-                map.data[MAP_IDX(map.info.width, x, y)] = 100;
+                map_.data[MAP_IDX(map_.info.width, x, y)] = 100;
             }
             else
-                map.data[MAP_IDX(map.info.width, x, y)] = 0;
+                map_.data[MAP_IDX(map_.info.width, x, y)] = 0;
         }
     }
     got_map_ = true;
 
     //make sure to set the header information on the map
-    map.header.stamp = get_clock()->now();
-    map.header.frame_id = map_frame_;
+    map_.header.stamp = get_clock()->now();
+    map_.header.frame_id = map_frame_;
 
-    sst_->publish(map);
-    sstm_->publish(map.info);
+    sst_->publish(map_);
+    sstm_->publish(map_.info);
     map_mutex_.unlock();
 }
 
