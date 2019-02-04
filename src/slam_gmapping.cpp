@@ -10,13 +10,16 @@ using std::placeholders::_1;
 
 SlamGmapping::SlamGmapping():
     Node("slam_gmapping"),
-    buffer_(get_clock()),
-    tfl_(buffer_),
     scan_filter_sub_(nullptr),
+    scan_filter_(nullptr),
     map_update_interval_(0, 5),
     laser_count_(0),
     transform_thread_(nullptr)
 {
+    buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
+    tfl_ = std::make_shared<tf2_ros::TransformListener>(*buffer_);
+    node_ = std::shared_ptr<rclcpp::Node>(this, [](rclcpp::Node *) {});
+    tfB_ = std::make_shared<tf2_ros::TransformBroadcaster>(node_);
     map_to_odom_.setIdentity();
     seed_ = static_cast<unsigned long>(time(nullptr));
     init();
@@ -73,9 +76,11 @@ void SlamGmapping::startLiveSlam() {
     entropy_publisher_ = this->create_publisher<std_msgs::msg::Float64>("entropy");
     sst_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("map");
     sstm_ = this->create_publisher<nav_msgs::msg::MapMetaData>("map_metadata");
-    scan_filter_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>
-            ("scan", std::bind(&SlamGmapping::laserCallback, this, _1));
-
+    scan_filter_sub_ = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::LaserScan>>
+            (node_, "scan");
+    scan_filter_ = std::make_shared<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>>
+            (*scan_filter_sub_, *buffer_, odom_frame_, 10, node_);
+    scan_filter_->registerCallback(std::bind(&SlamGmapping::laserCallback, this, std::placeholders::_1));
     transform_thread_ = new std::thread(std::bind(&SlamGmapping::publishLoop, this, transform_publish_period_));
 }
 
@@ -83,7 +88,6 @@ void SlamGmapping::publishLoop(double transform_publish_period){
     if (transform_publish_period == 0)
         return;
     rclcpp::Rate r(1.0 / transform_publish_period);
-    tfB_ = new tf2_ros::TransformBroadcaster(shared_from_this());
     while (rclcpp::ok()) {
         publishTransform();
         r.sleep();
@@ -112,7 +116,7 @@ bool SlamGmapping::getOdomPose(GMapping::OrientedPoint& gmap_pose, const rclcpp:
     geometry_msgs::msg::PoseStamped odom_pose;
     try
     {
-        buffer_.transform(centered_laser_pose_, odom_pose, odom_frame_, tf2::durationFromSec(1.0));
+        buffer_->transform(centered_laser_pose_, odom_pose, odom_frame_, tf2::durationFromSec(1.0));
     }
     catch(tf2::TransformException& e)
     {
@@ -128,7 +132,7 @@ bool SlamGmapping::getOdomPose(GMapping::OrientedPoint& gmap_pose, const rclcpp:
     return true;
 }
 
-bool SlamGmapping::initMapper(const sensor_msgs::msg::LaserScan::SharedPtr scan)
+bool SlamGmapping::initMapper(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan)
 {
     laser_frame_ = scan->header.frame_id;
     // Get the laser's pose, relative to base.
@@ -141,7 +145,7 @@ bool SlamGmapping::initMapper(const sensor_msgs::msg::LaserScan::SharedPtr scan)
         tf2::Transform transform;
         transform.setIdentity();
         tf2::toMsg(transform, ident.pose);
-        buffer_.transform(ident, laser_pose, base_frame_);
+        buffer_->transform(ident, laser_pose, base_frame_);
     }
     catch (tf2::TransformException& e){
         RCLCPP_WARN(this->get_logger(), "Failed to compute laser pose, aborting initialization (%s)", e.what());
@@ -156,7 +160,7 @@ bool SlamGmapping::initMapper(const sensor_msgs::msg::LaserScan::SharedPtr scan)
     up.point.z = 1 + laser_pose.pose.position.z;
     try
     {
-        buffer_.transform(up, up, laser_frame_);
+        buffer_->transform(up, up, laser_frame_);
     }
     catch(tf2::TransformException& e)
     {
@@ -276,7 +280,7 @@ bool SlamGmapping::initMapper(const sensor_msgs::msg::LaserScan::SharedPtr scan)
     return true;
 }
 
-bool SlamGmapping::addScan(const sensor_msgs::msg::LaserScan::SharedPtr scan, GMapping::OrientedPoint& gmap_pose) {
+bool SlamGmapping::addScan(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan, GMapping::OrientedPoint& gmap_pose) {
     if (!getOdomPose(gmap_pose, scan->header.stamp))
         return false;
 
@@ -323,7 +327,7 @@ bool SlamGmapping::addScan(const sensor_msgs::msg::LaserScan::SharedPtr scan, GM
 }
 
 
-void SlamGmapping::laserCallback(const sensor_msgs::msg::LaserScan::SharedPtr scan) {
+void SlamGmapping::laserCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr scan) {
     laser_count_++;
     if ((laser_count_ % throttle_scans_) != 0)
         return;
@@ -376,7 +380,7 @@ double SlamGmapping::computePoseEntropy()
     return -entropy;
 }
 
-void SlamGmapping::updateMap(const sensor_msgs::msg::LaserScan::SharedPtr scan)
+void SlamGmapping::updateMap(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan)
 {
     RCLCPP_DEBUG(this->get_logger(), "Update map");
     map_mutex_.lock();
@@ -488,7 +492,8 @@ void SlamGmapping::updateMap(const sensor_msgs::msg::LaserScan::SharedPtr scan)
 void SlamGmapping::publishTransform()
 {
     map_to_odom_mutex_.lock();
-    rclcpp::Time tf_expiration = get_clock()->now() + rclcpp::Duration(static_cast<rcl_duration_value_t>(tf_delay_));
+    rclcpp::Time tf_expiration = get_clock()->now() + rclcpp::Duration(
+            static_cast<int32_t>(static_cast<rcl_duration_value_t>(tf_delay_)), 0);
     geometry_msgs::msg::TransformStamped transform;
     transform.header.frame_id = map_frame_;
     transform.header.stamp = tf_expiration;
@@ -509,7 +514,5 @@ int main(int argc, char* argv[])
 
     auto slam_gmapping_node = std::make_shared<SlamGmapping>();
     rclcpp::spin(slam_gmapping_node);
-    tf2_ros::TransformBroadcaster tfb(slam_gmapping_node);
-    rclcpp::shutdown();
     return(0);
 }

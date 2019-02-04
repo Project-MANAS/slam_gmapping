@@ -21,6 +21,8 @@
 #include "tf2_ros/transform_listener.h"
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2/utils.h"
+#include "message_filters/subscriber.h"
+#include <tf2_ros/message_filter.h>
 
 #include "gmapping/gridfastslam/gridslamprocessor.h"
 #include "gmapping/sensor/sensor_base/sensor.h"
@@ -35,18 +37,21 @@ public:
     void init();
     void startLiveSlam();
     void publishTransform();
-    void laserCallback(sensor_msgs::msg::LaserScan::SharedPtr scan);
+    void laserCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr scan);
     void publishLoop(double transform_publish_period);
 
 private:
+    rclcpp::Node::SharedPtr node_;
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr entropy_publisher_;
     rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr sst_;
     rclcpp::Publisher<nav_msgs::msg::MapMetaData>::SharedPtr sstm_;
 
-    tf2_ros::Buffer buffer_;
-    tf2_ros::TransformListener tfl_;
-    rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_filter_sub_;
-    tf2_ros::TransformBroadcaster* tfB_;
+    std::shared_ptr<tf2_ros::Buffer> buffer_;
+    std::shared_ptr<tf2_ros::TransformListener> tfl_;
+
+    std::shared_ptr<message_filters::Subscriber<sensor_msgs::msg::LaserScan>> scan_filter_sub_;
+    std::shared_ptr<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan >> scan_filter_;
+    std::shared_ptr<tf2_ros::TransformBroadcaster> tfB_;
 
     GMapping::GridSlamProcessor* gsp_;
     GMapping::RangeSensor* gsp_laser_;
@@ -81,10 +86,10 @@ private:
     std::string map_frame_;
     std::string odom_frame_;
 
-    void updateMap(sensor_msgs::msg::LaserScan::SharedPtr scan);
+    void updateMap(sensor_msgs::msg::LaserScan::ConstSharedPtr scan);
     bool getOdomPose(GMapping::OrientedPoint& gmap_pose, const rclcpp::Time& t);
-    bool initMapper(sensor_msgs::msg::LaserScan::SharedPtr scan);
-    bool addScan(sensor_msgs::msg::LaserScan::SharedPtr scan, GMapping::OrientedPoint& gmap_pose);
+    bool initMapper(sensor_msgs::msg::LaserScan::ConstSharedPtr scan);
+    bool addScan(sensor_msgs::msg::LaserScan::ConstSharedPtr scan, GMapping::OrientedPoint& gmap_pose);
     double computePoseEntropy();
 
     // Parameters used by GMapping

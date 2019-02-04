@@ -23,6 +23,7 @@ find_package(nav_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(message_filters REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
@@ -47,6 +48,7 @@ ament_target_dependencies(slam_gmapping
         rclcpp
         tf2
         tf2_ros
+        message_filters
         sensor_msgs
         nav_msgs
         tf2_geometry_msgs
