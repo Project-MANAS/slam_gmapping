@@ -1,3 +1,21 @@
+/*
+ * slam_gmapping
+ * Copyright (c) 2008, Willow Garage, Inc.
+ *
+ * THE WORK (AS DEFINED BELOW) IS PROVIDED UNDER THE TERMS OF THIS CREATIVE
+ * COMMONS PUBLIC LICENSE ("CCPL" OR "LICENSE"). THE WORK IS PROTECTED BY
+ * COPYRIGHT AND/OR OTHER APPLICABLE LAW. ANY USE OF THE WORK OTHER THAN AS
+ * AUTHORIZED UNDER THIS LICENSE OR COPYRIGHT LAW IS PROHIBITED.
+ *
+ * BY EXERCISING ANY RIGHTS TO THE WORK PROVIDED HERE, YOU ACCEPT AND AGREE TO
+ * BE BOUND BY THE TERMS OF THIS LICENSE. THE LICENSOR GRANTS YOU THE RIGHTS
+ * CONTAINED HERE IN CONSIDERATION OF YOUR ACCEPTANCE OF SUCH TERMS AND
+ * CONDITIONS.
+ *
+ */
+
+/* Author: Brian Gerkey */
+
 //
 // Created by shivesh on 29/10/18.
 //
@@ -22,7 +40,7 @@
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2/utils.h"
 #include "message_filters/subscriber.h"
-#include <tf2_ros/message_filter.h>
+#include "tf2_ros/message_filter.h"
 
 #include "gmapping/gridfastslam/gridslamprocessor.h"
 #include "gmapping/sensor/sensor_base/sensor.h"
@@ -71,7 +89,7 @@ private:
     bool got_map_;
     nav_msgs::msg::OccupancyGrid map_;
 
-    rclcpp::Duration map_update_interval_;
+    tf2::Duration map_update_interval_;
     tf2::Transform map_to_odom_;
     std::mutex map_to_odom_mutex_;
     std::mutex map_mutex_;
@@ -79,7 +97,7 @@ private:
     int laser_count_;
     int throttle_scans_;
 
-    std::thread* transform_thread_;
+    std::shared_ptr<std::thread> transform_thread_;
 
     std::string base_frame_;
     std::string laser_frame_;

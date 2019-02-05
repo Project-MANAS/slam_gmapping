@@ -1,3 +1,22 @@
+/*
+ * slam_gmapping
+ * Copyright (c) 2008, Willow Garage, Inc.
+ *
+ * THE WORK (AS DEFINED BELOW) IS PROVIDED UNDER THE TERMS OF THIS CREATIVE
+ * COMMONS PUBLIC LICENSE ("CCPL" OR "LICENSE"). THE WORK IS PROTECTED BY
+ * COPYRIGHT AND/OR OTHER APPLICABLE LAW. ANY USE OF THE WORK OTHER THAN AS
+ * AUTHORIZED UNDER THIS LICENSE OR COPYRIGHT LAW IS PROHIBITED.
+ *
+ * BY EXERCISING ANY RIGHTS TO THE WORK PROVIDED HERE, YOU ACCEPT AND AGREE TO
+ * BE BOUND BY THE TERMS OF THIS LICENSE. THE LICENSOR GRANTS YOU THE RIGHTS
+ * CONTAINED HERE IN CONSIDERATION OF YOUR ACCEPTANCE OF SUCH TERMS AND
+ * CONDITIONS.
+ *
+ */
+
+/* Author: Brian Gerkey */
+/* Modified by: Charles DuHadway */
+
 //
 // Created by shivesh on 29/10/18.
 //
@@ -12,7 +31,6 @@ SlamGmapping::SlamGmapping():
     Node("slam_gmapping"),
     scan_filter_sub_(nullptr),
     scan_filter_(nullptr),
-    map_update_interval_(0, 5),
     laser_count_(0),
     transform_thread_(nullptr)
 {
@@ -40,6 +58,7 @@ void SlamGmapping::init() {
     odom_frame_ = "odom";
     transform_publish_period_ = 0.05;
 
+    map_update_interval_ = tf2::durationFromSec(0.5);
     maxUrange_ = 80.0;  maxRange_ = 0.0;
     minimum_score_ = 0;
     sigma_ = 0.05;
@@ -81,7 +100,8 @@ void SlamGmapping::startLiveSlam() {
     scan_filter_ = std::make_shared<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>>
             (*scan_filter_sub_, *buffer_, odom_frame_, 10, node_);
     scan_filter_->registerCallback(std::bind(&SlamGmapping::laserCallback, this, std::placeholders::_1));
-    transform_thread_ = new std::thread(std::bind(&SlamGmapping::publishLoop, this, transform_publish_period_));
+    transform_thread_ = std::make_shared<std::thread>
+            (std::bind(&SlamGmapping::publishLoop, this, transform_publish_period_));
 }
 
 void SlamGmapping::publishLoop(double transform_publish_period){
@@ -98,14 +118,11 @@ SlamGmapping::~SlamGmapping()
 {
     if(transform_thread_){
         transform_thread_->join();
-        delete transform_thread_;
     }
 
     delete gsp_;
-    if(gsp_laser_)
-        delete gsp_laser_;
-    if(gsp_odom_)
-        delete gsp_odom_;
+    delete gsp_laser_;
+    delete gsp_odom_;
 }
 
 bool SlamGmapping::getOdomPose(GMapping::OrientedPoint& gmap_pose, const rclcpp::Time& t)
@@ -171,8 +188,8 @@ bool SlamGmapping::initMapper(const sensor_msgs::msg::LaserScan::ConstSharedPtr 
     // gmapping doesnt take roll or pitch into account. So check for correct sensor alignment.
     if (fabs(fabs(up.point.z) - 1) > 0.001)
     {
-        RCLCPP_INFO(this->get_logger(), "Laser has to be mounted planar! Z-coordinate has to be 1 or -1, but gave: %.5f",
-                 up.point.z);
+        RCLCPP_INFO(this->get_logger(),
+                "Laser has to be mounted planar! Z-coordinate has to be 1 or -1, but gave: %.5f", up.point.z);
         return false;
     }
 
@@ -216,10 +233,10 @@ bool SlamGmapping::initMapper(const sensor_msgs::msg::LaserScan::ConstSharedPtr 
         theta += std::fabs(scan->angle_increment);
     }
 
-    RCLCPP_DEBUG(this->get_logger(), "Laser angles in laser-frame: min: %.3f max: %.3f inc: %.3f", scan->angle_min, scan->angle_max,
-              scan->angle_increment);
-    RCLCPP_DEBUG(this->get_logger(), "Laser angles in top-down centered laser-frame: min: %.3f max: %.3f inc: %.3f", laser_angles_.front(),
-              laser_angles_.back(), std::fabs(scan->angle_increment));
+    RCLCPP_DEBUG(this->get_logger(), "Laser angles in laser-frame: min: %.3f max: %.3f inc: %.3f",
+            scan->angle_min, scan->angle_max, scan->angle_increment);
+    RCLCPP_DEBUG(this->get_logger(), "Laser angles in top-down centered laser-frame: min: %.3f max: %.3f inc: %.3f",
+            laser_angles_.front(), laser_angles_.back(), std::fabs(scan->angle_increment));
 
     GMapping::OrientedPoint gmap_pose(0, 0, 0);
 
@@ -232,12 +249,8 @@ bool SlamGmapping::initMapper(const sensor_msgs::msg::LaserScan::ConstSharedPtr 
     // assumption that GMapping requires a positive angle increment.  If the
     // actual increment is negative, we'll swap the order of ranges before
     // feeding each scan to GMapping.
-    gsp_laser_ = new GMapping::RangeSensor("FLASER",
-                                           gsp_laser_beam_count_,
-                                           fabs(scan->angle_increment),
-                                           gmap_pose,
-                                           0.0,
-                                           maxRange_);
+    gsp_laser_ = new GMapping::RangeSensor("FLASER", gsp_laser_beam_count_, fabs(scan->angle_increment), gmap_pose,
+                                           0.0, maxRange_);
 
     GMapping::SensorMap smap;
     smap.insert(make_pair(gsp_laser_->getName(), gsp_laser_));
@@ -273,7 +286,7 @@ bool SlamGmapping::initMapper(const sensor_msgs::msg::LaserScan::ConstSharedPtr 
     gsp_->setminimumScore(minimum_score_);
 
     // Call the sampling function once to set the seed.
-    GMapping::sampleGaussian(1,seed_);
+    GMapping::sampleGaussian(1, static_cast<unsigned int>(seed_));
 
     RCLCPP_INFO(this->get_logger(), "Initialization complete");
 
@@ -332,7 +345,7 @@ void SlamGmapping::laserCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr sca
     if ((laser_count_ % throttle_scans_) != 0)
         return;
 
-    static rclcpp::Time last_map_update(0,0);
+    tf2::TimePoint last_map_update = tf2::TimePointZero;
 
     // We can't initialize the mapper until we've got the first scan
     if(!got_first_scan_)
@@ -358,10 +371,11 @@ void SlamGmapping::laserCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr sca
         map_to_odom_ = (odom_to_laser * laser_to_map).inverse();
         map_to_odom_mutex_.unlock();
 
-        if(!got_map_ || (scan->header.stamp.sec*1e9 + scan->header.stamp.nanosec - last_map_update.nanoseconds()) > map_update_interval_.nanoseconds())
+        tf2::TimePoint timestamp = tf2_ros::fromMsg(scan->header.stamp);
+        if(!got_map_ || (timestamp - last_map_update) > map_update_interval_)
         {
             updateMap(scan);
-            last_map_update = scan->header.stamp;
+            last_map_update = tf2_ros::fromMsg(scan->header.stamp);
         }
     }
 }

@@ -3,9 +3,16 @@
 <package format="2">
     <name>slam_gmapping</name>
     <version>0.0.0</version>
-    <description>Slam Gmapping on ROS2 Crystal</description>
-    <maintainer email="shiveshkhaitan@gmail.com">shiveshkhaitan</maintainer>
-    <license>TODO: License declaration</license>
+    <description>This package contains a ROS2 Crystal Clemmys wrapper for OpenSlam's Gmapping.
+        The gmapping package provides laser-based SLAM (Simultaneous Localization and Mapping),
+        as a ROS node called slam_gmapping. Using slam_gmapping, you can create a 2-D occupancy
+        grid map (like a building floorplan) from laser and pose data collected by a mobile robot.
+    </description>
+    <author>Brian Gerkey</author>
+    <maintainer email="vincent.rabaud@gmail.com">Vincent Rabaud</maintainer>
+    <license>CreativeCommons-by-nc-sa-2.0</license>
+
+    <url>http://ros.org/wiki/gmapping</url>
 
     <buildtool_depend>ament_cmake</buildtool_depend>
 
