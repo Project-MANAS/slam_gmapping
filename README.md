@@ -1,7 +1,7 @@
 # SLAM_GMAPPING
 SLAM(Simultaneous Localization and Mapping) is the computational problem of constructing or updating a map of an unknown environment while simultaneously keeping track of an agent's location within it.
 
-This contains package ```openslam_gmapping``` and ```slam_gmapping``` which is a ```ROS2 Crystal Clemmys``` wrapper for OpenSlam's Gmapping. Using slam_gmapping, you can create a 2-D occupancy grid map (like a building floorplan) from laser and pose data collected by a mobile robot.
+This contains package ```openslam_gmapping``` and ```slam_gmapping``` which is a ROS2 wrapper for OpenSlam's Gmapping. The wrapper has been successfully tested with ```Crystal Clemmys``` and ```Dashing Diademata```. Using slam_gmapping, you can create a 2-D occupancy grid map (like a building floorplan) from laser and pose data collected by a mobile robot.
 
 ## Launch:
 
