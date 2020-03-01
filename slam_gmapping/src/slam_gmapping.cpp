@@ -96,7 +96,7 @@ void SlamGmapping::startLiveSlam() {
     sst_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("map");
     sstm_ = this->create_publisher<nav_msgs::msg::MapMetaData>("map_metadata");
     scan_filter_sub_ = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::LaserScan>>
-            (node_, "scan");
+            (node_, "scan", rmw_qos_profile_sensor_data);
     scan_filter_ = std::make_shared<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>>
             (*scan_filter_sub_, *buffer_, odom_frame_, 10, node_);
     scan_filter_->registerCallback(std::bind(&SlamGmapping::laserCallback, this, std::placeholders::_1));
