@@ -23,6 +23,8 @@
 
 #include "slam_gmapping/slam_gmapping.h"
 
+#include "tf2_ros/create_timer_ros.h"
+
 #define MAP_IDX(sx, i, j) ((sx) * (j) + (i))
 
 using std::placeholders::_1;
@@ -35,6 +37,10 @@ SlamGmapping::SlamGmapping():
     transform_thread_(nullptr)
 {
     buffer_ = std::make_shared<tf2_ros::Buffer>(get_clock());
+     auto timer_interface = std::make_shared<tf2_ros::CreateTimerROS>(
+        get_node_base_interface(),
+        get_node_timers_interface());
+    buffer_->setCreateTimerInterface(timer_interface);
     tfl_ = std::make_shared<tf2_ros::TransformListener>(*buffer_);
     node_ = std::shared_ptr<rclcpp::Node>(this, [](rclcpp::Node *) {});
     tfB_ = std::make_shared<tf2_ros::TransformBroadcaster>(node_);
@@ -92,11 +98,14 @@ void SlamGmapping::init() {
 }
 
 void SlamGmapping::startLiveSlam() {
-    entropy_publisher_ = this->create_publisher<std_msgs::msg::Float64>("entropy");
-    sst_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("map");
-    sstm_ = this->create_publisher<nav_msgs::msg::MapMetaData>("map_metadata");
+    entropy_publisher_ = this->create_publisher<std_msgs::msg::Float64>("entropy", rclcpp::SystemDefaultsQoS());
+    sst_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("map", rclcpp::SystemDefaultsQoS());
+    sstm_ = this->create_publisher<nav_msgs::msg::MapMetaData>("map_metadata", rclcpp::SystemDefaultsQoS());
     scan_filter_sub_ = std::make_shared<message_filters::Subscriber<sensor_msgs::msg::LaserScan>>
-            (node_, "scan");
+            (node_, "scan", rclcpp::SensorDataQoS().get_rmw_qos_profile());
+//    sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
+//        "scan", rclcpp::SensorDataQoS(),
+//        std::bind(&SlamGmapping::laserCallback, this, std::placeholders::_1));
     scan_filter_ = std::make_shared<tf2_ros::MessageFilter<sensor_msgs::msg::LaserScan>>
             (*scan_filter_sub_, *buffer_, odom_frame_, 10, node_);
     scan_filter_->registerCallback(std::bind(&SlamGmapping::laserCallback, this, std::placeholders::_1));
