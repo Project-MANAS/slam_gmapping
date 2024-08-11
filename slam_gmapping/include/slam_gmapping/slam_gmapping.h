@@ -88,7 +88,7 @@ private:
 
     bool got_map_;
     nav_msgs::msg::OccupancyGrid map_;
-
+    double map_update_interval_double_; //to recieve double from yaml file 
     tf2::Duration map_update_interval_;
     tf2::Transform map_to_odom_;
     std::mutex map_to_odom_mutex_;
