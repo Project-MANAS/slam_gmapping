@@ -11,11 +11,17 @@ if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 14)
 endif()
 
+# DEFAULT RELEASE
+if (NOT EXISTS ${CMAKE_BINARY_DIR}/CMakeCache.txt)
+  if (NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
+  endif()
+endif()
+
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
-set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld -Wl,--disable-new-dtags")
-message(${CMAKE_SHARED_LINKER_FLAGS})
+
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(std_msgs REQUIRED)
@@ -25,6 +31,7 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(message_filters REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_components REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(openslam_gmapping REQUIRED)
@@ -40,24 +47,38 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-include_directories(include)
+# include_directories(include)
 
-add_executable(slam_gmapping src/slam_gmapping.cpp)
+add_library(slam_gmapping SHARED
+    src/slam_gmapping.cpp)
+
+target_include_directories(slam_gmapping
+PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>)
 
 ament_target_dependencies(slam_gmapping
-        rclcpp
-        tf2
-        tf2_ros
-        message_filters
-        sensor_msgs
-        nav_msgs
-        tf2_geometry_msgs
-        openslam_gmapping)
+    rclcpp
+    rclcpp_components
+    tf2
+    tf2_ros
+    message_filters
+    sensor_msgs
+    nav_msgs
+    tf2_geometry_msgs
+    openslam_gmapping)
 
-install(TARGETS slam_gmapping
-        DESTINATION lib/${PROJECT_NAME})
+rclcpp_components_register_node(slam_gmapping 
+    PLUGIN "SlamGmapping" 
+    EXECUTABLE slam_gmapping_node)
 
-install(DIRECTORY launch
+install(TARGETS slam_gmapping 
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+)
+
+install(DIRECTORY launch config
 	    DESTINATION share/${PROJECT_NAME})
 
 ament_package()

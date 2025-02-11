@@ -17,7 +17,9 @@ const double m_distanceThresholdCheck = 20;
  
 using namespace std;
 
-  GridSlamProcessor::GridSlamProcessor(): m_infoStream(cout){
+
+  GridSlamProcessor::GridSlamProcessor()
+    :m_infoStream(cout){
     
     period_ = 5.0;
     m_obsSigmaGain=1;
